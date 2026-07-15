@@ -1,0 +1,308 @@
+{
+  "name": "v-router-smart",
+  "displayName": "V-Router Smart",
+  "description": "Trợ lý lập trình AI độc lập cho VS Code, kết nối trực tiếp tới V-Router.",
+  "version": "0.1.0",
+  "publisher": "vrouter-smart",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vrouter-smart/v-router-smart.git"
+  },
+  "engines": {
+    "vscode": "^1.94.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "keywords": [
+    "v-router",
+    "ai",
+    "chat",
+    "coding assistant",
+    "openai-compatible"
+  ],
+  "main": "./dist/extension.js",
+  "icon": "media/vrouter-icon.png",
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:vRouterSmart.chatView",
+    "onView:vRouterSmart.chatSecondaryView",
+    "onCommand:vRouterSmart.openChat",
+    "onCommand:vRouterSmart.setApiKey",
+    "onCommand:vRouterSmart.removeApiKey",
+    "onCommand:vRouterSmart.validateApiKey",
+    "onCommand:vRouterSmart.refreshModels",
+    "onCommand:vRouterSmart.refreshQuota",
+    "onCommand:vRouterSmart.newChat",
+    "onCommand:vRouterSmart.attachSelection",
+    "onCommand:vRouterSmart.explainSelection",
+    "onCommand:vRouterSmart.fixSelection",
+    "onCommand:vRouterSmart.showLastRequest",
+    "onCommand:vRouterSmart.openLogs"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "Chat và quản lý API key hoạt động trong Restricted Mode. Đọc file workspace và áp dụng code yêu cầu xác nhận phù hợp."
+    },
+    "virtualWorkspaces": false
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "vRouterSmart",
+          "title": "Chat",
+          "icon": "media/vrouter-activity.svg",
+          "when": "vRouterSmart.doesNotSupportSecondarySidebar"
+        }
+      ],
+      "secondarySidebar": [
+        {
+          "id": "vRouterSmartSecondary",
+          "title": "Chat",
+          "icon": "media/vrouter-activity.svg",
+          "when": "!vRouterSmart.doesNotSupportSecondarySidebar"
+        }
+      ]
+    },
+    "views": {
+      "vRouterSmart": [
+        {
+          "id": "vRouterSmart.chatView",
+          "name": "Chat",
+          "type": "webview",
+          "when": "vRouterSmart.doesNotSupportSecondarySidebar"
+        }
+      ],
+      "vRouterSmartSecondary": [
+        {
+          "id": "vRouterSmart.chatSecondaryView",
+          "name": "Chat",
+          "type": "webview",
+          "when": "!vRouterSmart.doesNotSupportSecondarySidebar"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "vRouterSmart.openChat",
+        "title": "V-Router Smart: Open Chat",
+        "category": "V-Router Smart"
+      },
+      {
+        "command": "vRouterSmart.setApiKey",
+        "title": "V-Router Smart: Set or Replace API Key",
+        "category": "V-Router Smart"
+      },
+      {
+        "command": "vRouterSmart.removeApiKey",
+        "title": "V-Router Smart: Remove API Key",
+        "category": "V-Router Smart"
+      },
+      {
+        "command": "vRouterSmart.validateApiKey",
+        "title": "V-Router Smart: Validate API Key",
+        "category": "V-Router Smart"
+      },
+      {
+        "command": "vRouterSmart.refreshModels",
+        "title": "V-Router Smart: Refresh Models",
+        "category": "V-Router Smart"
+      },
+      {
+        "command": "vRouterSmart.refreshQuota",
+        "title": "V-Router Smart: Refresh Quota",
+        "category": "V-Router Smart"
+      },
+      {
+        "command": "vRouterSmart.newChat",
+        "title": "V-Router Smart: New Chat",
+        "category": "V-Router Smart"
+      },
+      {
+        "command": "vRouterSmart.attachSelection",
+        "title": "V-Router Smart: Attach Selection",
+        "category": "V-Router Smart"
+      },
+      {
+        "command": "vRouterSmart.explainSelection",
+        "title": "V-Router Smart: Explain Selected Code",
+        "category": "V-Router Smart"
+      },
+      {
+        "command": "vRouterSmart.fixSelection",
+        "title": "V-Router Smart: Fix Selected Code",
+        "category": "V-Router Smart"
+      },
+      {
+        "command": "vRouterSmart.showLastRequest",
+        "title": "V-Router Smart: Show Last Sanitized Request",
+        "category": "V-Router Smart"
+      },
+      {
+        "command": "vRouterSmart.openLogs",
+        "title": "V-Router Smart: Open Logs",
+        "category": "V-Router Smart"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "vRouterSmart.explainSelection",
+          "when": "editorHasSelection",
+          "group": "navigation@70"
+        },
+        {
+          "command": "vRouterSmart.fixSelection",
+          "when": "editorHasSelection",
+          "group": "navigation@71"
+        },
+        {
+          "command": "vRouterSmart.attachSelection",
+          "when": "editorHasSelection",
+          "group": "navigation@72"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "V-Router Smart",
+      "properties": {
+        "vRouterSmart.serverOrigin": {
+          "type": "string",
+          "default": "https://v-router.fpt.ovh",
+          "description": "Server Origin của V-Router. HTTP chỉ được chấp nhận cho localhost/127.0.0.1/[::1]."
+        },
+        "vRouterSmart.defaultModel": {
+          "type": "string",
+          "default": "",
+          "description": "Model mặc định khi model còn nằm trong danh sách được phép."
+        },
+        "vRouterSmart.systemPrompt": {
+          "type": "string",
+          "default": "",
+          "description": "System prompt tùy chọn. Mặc định rỗng và không được gửi."
+        },
+        "vRouterSmart.streaming": {
+          "type": "boolean",
+          "default": true,
+          "description": "Bật streaming cho Chat Completions."
+        },
+        "vRouterSmart.requestTimeoutMs": {
+          "type": "number",
+          "default": 120000,
+          "minimum": 10000,
+          "maximum": 600000,
+          "description": "Timeout tổng quát cho request."
+        },
+        "vRouterSmart.streamStallTimeoutMs": {
+          "type": "number",
+          "default": 60000,
+          "minimum": 10000,
+          "maximum": 300000,
+          "description": "Timeout khi stream không nhận dữ liệu mới."
+        },
+        "vRouterSmart.quotaCacheTtlMs": {
+          "type": "number",
+          "default": 20000,
+          "minimum": 0,
+          "maximum": 300000,
+          "description": "TTL cache quota."
+        },
+        "vRouterSmart.modelCacheTtlMs": {
+          "type": "number",
+          "default": 300000,
+          "minimum": 0,
+          "maximum": 3600000,
+          "description": "TTL cache model."
+        },
+        "vRouterSmart.autoAttachSelection": {
+          "type": "boolean",
+          "default": false,
+          "description": "Tự đính kèm selection khi gửi chat."
+        },
+        "vRouterSmart.maxContextBytes": {
+          "type": "number",
+          "default": 512000,
+          "minimum": 1024,
+          "maximum": 1048576,
+          "description": "Giới hạn tổng dung lượng context."
+        },
+        "vRouterSmart.maxFileContextBytes": {
+          "type": "number",
+          "default": 204800,
+          "minimum": 1024,
+          "maximum": 524288,
+          "description": "Giới hạn dung lượng mỗi file context."
+        },
+        "vRouterSmart.confirmBeforeApply": {
+          "type": "boolean",
+          "default": true,
+          "description": "Yêu cầu xác nhận trước khi Insert/Replace code từ chat."
+        },
+        "vRouterSmart.debugLogging": {
+          "type": "boolean",
+          "default": false,
+          "description": "Ghi log debug đã redact. Không bao giờ ghi secret."
+        },
+        "vRouterSmart.temperatureEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Chỉ gửi temperature khi bật."
+        },
+        "vRouterSmart.temperature": {
+          "type": "number",
+          "default": 0.2,
+          "minimum": 0,
+          "maximum": 2,
+          "description": "Temperature tùy chọn."
+        },
+        "vRouterSmart.maxTokensEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Chỉ gửi max_tokens khi bật."
+        },
+        "vRouterSmart.maxTokens": {
+          "type": "number",
+          "default": 4096,
+          "minimum": 1,
+          "maximum": 200000,
+          "description": "max_tokens tùy chọn."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "assets": "node scripts/create-assets.mjs",
+    "compile": "npm run assets && node esbuild.mjs",
+    "watch": "npm run assets && node esbuild.mjs --watch",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "vitest run test/unit --config vitest.config.mts",
+    "test:integration": "vitest run test/integration --config vitest.config.mts",
+    "test:vscode": "npm run compile && esbuild test/integration/suite/index.ts --bundle --platform=node --external:vscode --format=cjs --outfile=dist/test/integration/suite/index.js && vscode-test",
+    "package": "npm run compile",
+    "vsix": "npm run compile && vsce package --no-dependencies"
+  },
+  "dependencies": {
+    "dompurify": "^3.2.6",
+    "markdown-it": "^14.1.0"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^20.19.9",
+    "@types/vscode": "^1.92.0",
+    "@typescript-eslint/eslint-plugin": "^8.38.0",
+    "@typescript-eslint/parser": "^8.38.0",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.6.0",
+    "esbuild": "^0.25.8",
+    "eslint": "^9.31.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

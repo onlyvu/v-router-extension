@@ -1,0 +1,16 @@
+export const EXTENSION_ID = "v-router-smart";
+export const EXTENSION_DISPLAY_NAME = "V-Router Smart";
+export const VIEW_CONTAINER_ID = "vRouterSmart";
+export const SECONDARY_VIEW_CONTAINER_ID = "vRouterSmartSecondary";
+export const CHAT_VIEW_ID = "vRouterSmart.chatView";
+export const CHAT_SECONDARY_VIEW_ID = "vRouterSmart.chatSecondaryView";
+export const OUTPUT_CHANNEL_NAME = "V-Router Smart";
+export const SECRET_API_KEY = "vRouterSmart.apiKey";
+export const DEFAULT_SERVER_ORIGIN = "https://v-router.fpt.ovh";
+export const OPENAI_BASE_PATH = "/v1";
+export const LAST_MODEL_KEY = "vRouterSmart.lastModel";
+export const CONVERSATION_STATE_KEY = "vRouterSmart.conversations";
+export const MAX_CONTEXT_HARD_BYTES = 1_048_576;
+export const MAX_FILE_CONTEXT_HARD_BYTES = 524_288;
+export const MODEL_CACHE_TTL_DEFAULT_MS = 300_000;
+export const QUOTA_CACHE_TTL_DEFAULT_MS = 20_000;
