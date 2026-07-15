@@ -37,9 +37,21 @@ export function registerCommands(provider: ChatViewProvider, logger: Logger): vs
     vscode.commands.registerCommand("vRouterSmart.refreshQuota", async () => {
       await provider.refreshQuota(true);
     }),
+    vscode.commands.registerCommand("vRouterSmart.refreshView", async () => {
+      await provider.refreshView();
+    }),
+    vscode.commands.registerCommand("vRouterSmart.openSettings", async () => {
+      await vscode.commands.executeCommand("workbench.action.openSettings", "vRouterSmart");
+    }),
     vscode.commands.registerCommand("vRouterSmart.newChat", async () => {
       await provider.newChat();
       await provider.openChatPanel();
+    }),
+    vscode.commands.registerCommand("vRouterSmart.clearAllHistory", async () => {
+      await provider.clearAllHistory();
+    }),
+    vscode.commands.registerCommand("vRouterSmart.showTaskHistory", async () => {
+      await provider.showHistoryQuickPick();
     }),
     vscode.commands.registerCommand("vRouterSmart.attachSelection", async () => {
       await provider.attachSelection();
@@ -55,6 +67,33 @@ export function registerCommands(provider: ChatViewProvider, logger: Logger): vs
     }),
     vscode.commands.registerCommand("vRouterSmart.showLastRequest", async () => {
       await provider.showLastRequest();
+    }),
+    vscode.commands.registerCommand("vRouterSmart.showAgentInstructions", async () => {
+      await provider.showAgentInstructions();
+    }),
+    vscode.commands.registerCommand("vRouterSmart.showToolDefinitions", async () => {
+      await provider.showToolDefinitions();
+    }),
+    vscode.commands.registerCommand("vRouterSmart.startAgentTask", async () => {
+      await provider.openChatPanel();
+    }),
+    vscode.commands.registerCommand("vRouterSmart.stopAgent", () => {
+      provider.stopAgent();
+    }),
+    vscode.commands.registerCommand("vRouterSmart.reviewAgentChanges", () => {
+      void vscode.window.showInformationMessage("ChangeSet review UI chưa có pending ChangeSet.");
+    }),
+    vscode.commands.registerCommand("vRouterSmart.applyAllChanges", () => {
+      void vscode.window.showInformationMessage("Không có ChangeSet đang chờ apply.");
+    }),
+    vscode.commands.registerCommand("vRouterSmart.rejectAllChanges", () => {
+      void vscode.window.showInformationMessage("Không có ChangeSet đang chờ reject.");
+    }),
+    vscode.commands.registerCommand("vRouterSmart.undoLastAgentTask", () => {
+      void vscode.window.showInformationMessage("Undo task sẽ khả dụng sau khi ChangeSet/checkpoint được tạo.");
+    }),
+    vscode.commands.registerCommand("vRouterSmart.showAgentHistory", () => {
+      void vscode.window.showInformationMessage("Agent history store sẽ được hiển thị trong phase ChangeSet/checkpoint.");
     }),
     vscode.commands.registerCommand("vRouterSmart.openLogs", () => {
       logger.show();

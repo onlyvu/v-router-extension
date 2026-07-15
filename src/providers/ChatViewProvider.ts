@@ -5,8 +5,10 @@ import type { ApiKeyService } from "../auth/ApiKeyService";
 import { maskApiKey } from "../auth/ApiKeyService";
 import type { SessionService } from "../auth/SessionService";
 import type { ChatService } from "../chat/ChatService";
+import { buildRuntimePolicyPrompt } from "../chat/ChatRequestBuilder";
+import { getAgentToolDefinitionsForDisplay } from "../chat/agentToolDefinitions";
 import type { ConversationStore } from "../chat/conversationStore";
-import { evaluateContextLimits } from "../chat/contextBuilder";
+import { createContextMetadata, evaluateContextLimits } from "../chat/contextBuilder";
 import type { ChatAccessMode, ChatMode, ContextAttachment, ResolvedContextAttachment } from "../chat/types";
 import { CHAT_SECONDARY_VIEW_ID, CHAT_VIEW_ID, SECONDARY_VIEW_CONTAINER_ID, VIEW_CONTAINER_ID } from "../config/constants";
 import { getSettings } from "../config/settings";
@@ -31,8 +33,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private models: ModelEntry[] = [];
   private selectedModel = "";
   private usage: UsageResponse | null = null;
-  private chatMode: ChatMode = "agent";
-  private accessMode: ChatAccessMode = "full";
+  private chatMode: ChatMode = "chat";
+  private accessMode: ChatAccessMode = "review_edits";
 
   public constructor(
     private readonly extensionUri: vscode.Uri,
@@ -46,7 +48,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     private readonly chatService: ChatService,
     private readonly conversationStore: ConversationStore,
     private readonly logger: Logger
-  ) {}
+  ) {
+    this.applyDefaultModeSettings();
+  }
 
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.adminView = webviewView;
@@ -192,6 +196,50 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     this.send({ type: "chat:conversation", conversation });
   }
 
+  public async clearAllHistory(): Promise<void> {
+    const choice = await vscode.window.showWarningMessage(
+      "Xóa toàn bộ task và lịch sử chat V-Router Smart trong workspace này?",
+      { modal: true },
+      "Xóa tất cả"
+    );
+    if (choice !== "Xóa tất cả") {
+      return;
+    }
+    const conversation = await this.conversationStore.clearAll();
+    this.contexts = [];
+    this.send({ type: "chat:conversation", conversation });
+    await this.sendInitState();
+  }
+
+  public async deleteConversation(conversationId: string): Promise<void> {
+    const conversation = this.conversationStore.getData().conversations.find((item) => item.id === conversationId);
+    if (conversation === undefined) {
+      return;
+    }
+    const choice = await vscode.window.showWarningMessage(
+      `Xóa task "${conversation.title}"?`,
+      { modal: true },
+      "Xóa"
+    );
+    if (choice !== "Xóa") {
+      return;
+    }
+    const active = await this.conversationStore.deleteConversation(conversationId);
+    this.send({ type: "chat:conversation", conversation: active });
+    await this.sendInitState();
+  }
+
+  public async refreshView(): Promise<void> {
+    await this.initializeFromSecret();
+    await this.refreshModels(false);
+    await this.refreshQuota(false);
+    await this.sendInitState();
+  }
+
+  public stopAgent(): void {
+    this.chatService.stop();
+  }
+
   public async attachSelection(): Promise<void> {
     if (!await this.confirmReadAccess("selection hiện tại")) {
       return;
@@ -228,6 +276,107 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     this.addContexts(contexts);
   }
 
+  public async attachDiagnostics(): Promise<void> {
+    if (!await this.confirmReadAccess("VS Code Problems")) {
+      return;
+    }
+    const diagnostics = vscode.languages.getDiagnostics()
+      .flatMap(([uri, items]) => items.map((item) => ({
+        path: vscode.workspace.asRelativePath(uri, false),
+        severity: vscode.DiagnosticSeverity[item.severity] ?? String(item.severity),
+        line: item.range.start.line + 1,
+        character: item.range.start.character + 1,
+        message: item.message
+      })))
+      .slice(0, 120);
+    if (diagnostics.length === 0) {
+      this.send({ type: "notification", level: "info", message: "Không có diagnostics trong workspace." });
+      return;
+    }
+    const content = diagnostics
+      .map((item) => `${item.path}:${item.line}:${item.character} [${item.severity}] ${item.message}`)
+      .join("\n");
+    const metadata = createContextMetadata("VS Code Problems", content);
+    this.addContexts([{
+      id: `diag-${crypto.randomUUID()}`,
+      kind: "diagnostics",
+      path: "VS Code Problems",
+      language: "text",
+      ...metadata,
+      content
+    }]);
+  }
+
+  public async openAttachmentMenu(): Promise<void> {
+    const picked = await vscode.window.showQuickPick([
+      { label: "$(selection) Attach selection", id: "selection", description: "Đính kèm đoạn đang chọn" },
+      { label: "$(file-code) Attach active file", id: "activeFile", description: "Đính kèm file đang mở" },
+      { label: "$(files) Choose files", id: "files", description: "Chọn file từ workspace" },
+      { label: "$(warning) Attach diagnostics", id: "diagnostics", description: "Đính kèm Problems hiện tại" },
+      { label: "$(clear-all) Clear attachments", id: "clear", description: "Xóa context đang đính kèm" }
+    ], {
+      title: "Attach context",
+      placeHolder: "Chọn nguồn context cho V-Router"
+    });
+    if (picked === undefined) {
+      return;
+    }
+    switch (picked.id) {
+      case "selection":
+        await this.attachSelection();
+        break;
+      case "activeFile":
+        await this.attachActiveFile();
+        break;
+      case "files":
+        await this.chooseFiles();
+        break;
+      case "diagnostics":
+        await this.attachDiagnostics();
+        break;
+      case "clear":
+        this.contexts = [];
+        this.sendContext();
+        break;
+      default:
+        break;
+    }
+  }
+
+  public addPastedImage(name: string, mimeType: string, dataUri: string, bytes: number): void {
+    const safeName = name.trim().length > 0 ? name.trim().slice(0, 80) : `pasted-image-${this.contexts.length + 1}.png`;
+    const context: ResolvedContextAttachment = {
+      id: `img-${crypto.randomUUID()}`,
+      kind: "image",
+      path: safeName,
+      language: "image",
+      bytes,
+      tokenEstimate: 0,
+      mimeType,
+      previewDataUri: dataUri,
+      content: dataUri
+    };
+    this.addContexts([context]);
+  }
+
+  public async showHistoryQuickPick(): Promise<void> {
+    const conversations = this.conversationStore.getData().conversations;
+    const picked = await vscode.window.showQuickPick(conversations.map((conversation) => ({
+      label: conversation.title,
+      description: formatRelativeAge(conversation.updatedAt),
+      detail: `${conversation.messages.length} message${conversation.messages.length === 1 ? "" : "s"}`,
+      id: conversation.id
+    })), {
+      title: "V-Router task history",
+      placeHolder: "Chọn task để mở"
+    });
+    if (picked === undefined) {
+      return;
+    }
+    await this.conversationStore.selectConversation(picked.id);
+    await this.sendInitState();
+  }
+
   public fillPromptForSelection(kind: "explain" | "fix"): void {
     const prompt = kind === "explain" ? "Giải thích đoạn code đang chọn." : "Tìm lỗi và đề xuất bản sửa cho đoạn code đang chọn.";
     void this.attachSelection();
@@ -240,6 +389,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     const content = snapshot === null
       ? JSON.stringify({ message: "Chưa có request chat nào." }, null, 2)
       : JSON.stringify(snapshot, null, 2);
+    const document = await vscode.workspace.openTextDocument({ content, language: "json" });
+    await vscode.window.showTextDocument(document, { preview: false });
+  }
+
+  public async showAgentInstructions(): Promise<void> {
+    const content = buildRuntimePolicyPrompt("agent", this.accessMode);
+    const document = await vscode.workspace.openTextDocument({ content, language: "markdown" });
+    await vscode.window.showTextDocument(document, { preview: false });
+  }
+
+  public async showToolDefinitions(): Promise<void> {
+    const content = JSON.stringify(getAgentToolDefinitionsForDisplay(), null, 2);
     const document = await vscode.workspace.openTextDocument({ content, language: "json" });
     await vscode.window.showTextDocument(document, { preview: false });
   }
@@ -289,6 +450,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       case "chat:clear":
         await this.clearChat();
         break;
+      case "chat:clearAll":
+        await this.clearAllHistory();
+        break;
+      case "chat:delete":
+        await this.deleteConversation(message.conversationId);
+        break;
       case "chat:setMode":
         this.chatMode = message.mode;
         await this.sendInitState();
@@ -305,7 +472,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         await this.sendChat(message.text);
         break;
       case "chat:stop":
-        this.chatService.stop();
+        this.stopAgent();
         break;
       case "context:attachSelection":
         await this.attachSelection();
@@ -315,6 +482,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         break;
       case "context:chooseFiles":
         await this.chooseFiles();
+        break;
+      case "context:openMenu":
+        await this.openAttachmentMenu();
+        break;
+      case "context:attachImage":
+        this.addPastedImage(message.name, message.mimeType, message.dataUri, message.bytes);
         break;
       case "context:remove":
         this.contexts = this.contexts.filter((context) => context.id !== message.id);
@@ -345,6 +518,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         break;
       case "settings:open":
         await vscode.commands.executeCommand("workbench.action.openSettings", "vRouterSmart");
+        break;
+      case "history:open":
+        await this.showHistoryQuickPick();
         break;
       case "request:showLast":
         await this.showLastRequest();
@@ -382,12 +558,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
   private async sendChat(text: string): Promise<void> {
     const trimmed = text.trim();
-    if (trimmed.length === 0) {
+    const fallbackText = this.contexts.length > 0 ? "Hãy phân tích nội dung đã đính kèm." : "";
+    const userText = trimmed.length > 0 ? trimmed : fallbackText;
+    if (userText.length === 0) {
       this.send({ type: "notification", level: "warning", message: "Nội dung chat không được rỗng." });
       return;
     }
     const { settings, warnings } = getSettings();
     this.logSettingsWarnings(warnings);
+    if (this.chatMode === "agent" && !settings.agentEnabled) {
+      this.send({ type: "notification", level: "error", message: "Agent Mode đang bị tắt trong settings." });
+      return;
+    }
     if (settings.autoAttachSelection) {
       const selection = getSelectionContext();
       if (selection !== null && !this.contexts.some((context) => context.path === selection.path && context.lineRange === selection.lineRange)) {
@@ -405,7 +587,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     }
     try {
       const conversation = this.conversationStore.getActiveConversation();
-      await this.chatService.send(trimmed, this.selectedModel, this.contexts, settings, this.chatMode, this.accessMode, {
+      await this.chatService.send(userText, this.selectedModel, this.contexts, settings, this.chatMode, this.accessMode, {
         onUserMessage: (message) => this.send({ type: "chat:message", conversationId: conversation.id, message }),
         onAssistantMessage: (message) => {
           this.send({ type: "chat:message", conversationId: conversation.id, message });
@@ -474,6 +656,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       if (context.warning !== undefined) {
         metadata.warning = context.warning;
       }
+      if (context.mimeType !== undefined) {
+        metadata.mimeType = context.mimeType;
+      }
+      if (context.previewDataUri !== undefined) {
+        metadata.previewDataUri = context.previewDataUri;
+      }
       return metadata;
     });
   }
@@ -502,7 +690,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   }
 
   private async confirmReadAccess(target: string): Promise<boolean> {
-    if (this.accessMode !== "ask") {
+    if (this.accessMode !== "review_edits") {
       return true;
     }
     const choice = await vscode.window.showWarningMessage(
@@ -514,13 +702,24 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   }
 
   private shouldConfirmBeforeApply(configuredConfirm: boolean): boolean {
-    if (this.accessMode === "full") {
+    if (this.accessMode === "full_agent" || this.accessMode === "auto_apply_safe") {
       return false;
     }
-    if (this.accessMode === "ask") {
+    if (this.accessMode === "read_only" || this.accessMode === "review_edits") {
       return true;
     }
     return configuredConfirm;
+  }
+
+  private applyDefaultModeSettings(): void {
+    const { settings, warnings } = getSettings();
+    this.logSettingsWarnings(warnings);
+    if (this.chatMode === "chat" && settings.defaultMode !== "chat") {
+      this.chatMode = settings.defaultMode;
+    }
+    if (this.accessMode === "review_edits" && settings.agentPermissionMode !== "review_edits") {
+      this.accessMode = settings.agentPermissionMode;
+    }
   }
 
   private notifyError(error: unknown): void {
@@ -583,4 +782,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 </body>
 </html>`;
   }
+}
+
+function formatRelativeAge(value: string): string {
+  const deltaMs = Math.max(0, Date.now() - new Date(value).getTime());
+  const minutes = Math.floor(deltaMs / 60000);
+  if (minutes < 1) {
+    return "now";
+  }
+  if (minutes < 60) {
+    return `${minutes}m ago`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${hours}h ago`;
+  }
+  return `${Math.floor(hours / 24)}d ago`;
 }

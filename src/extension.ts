@@ -6,7 +6,7 @@ import { SessionService } from "./auth/SessionService";
 import { ChatService } from "./chat/ChatService";
 import { ConversationStore } from "./chat/conversationStore";
 import { registerCommands } from "./commands/registerCommands";
-import { CHAT_SECONDARY_VIEW_ID, CHAT_VIEW_ID } from "./config/constants";
+import { CHAT_SECONDARY_VIEW_ID, CHAT_VIEW_ID, DEFAULT_SERVER_ORIGIN } from "./config/constants";
 import { getSettings } from "./config/settings";
 import { Logger } from "./logging/logger";
 import { ModelService } from "./models/ModelService";
@@ -30,7 +30,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     logger.warn(`Setting ${warning.key}: ${warning.message}`);
   }
   const client = new VRouterClient(
-    settingsResult.settings.serverOrigin,
+    DEFAULT_SERVER_ORIGIN,
     cookieManager,
     () => apiKeyService.getApiKey(),
     logger
@@ -72,19 +72,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     if (!event.affectsConfiguration("vRouterSmart")) {
       return;
     }
-    const { settings, warnings } = getSettings();
+    const { warnings } = getSettings();
     for (const warning of warnings) {
       logger.warn(`Setting ${warning.key}: ${warning.message}`);
-    }
-    if (client.serverOrigin !== settings.serverOrigin) {
-      quotaStream.stop();
-      client.updateServerOrigin(settings.serverOrigin);
-      await apiKeyService.deleteApiKey();
-      sessionService.clear();
-      quotaService.clear();
-      quotaStatusBar.clear();
-      logger.warn("Server Origin changed; API key was removed and must be re-authenticated.");
-      void vscode.window.showWarningMessage("V-Router Server Origin đã thay đổi. Vui lòng nhập lại API key.");
     }
   }));
 

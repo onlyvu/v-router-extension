@@ -47,19 +47,28 @@ export function buildChatRequest(options: BuildChatRequestOptions): ChatCompleti
 }
 
 export function buildRuntimePolicyPrompt(chatMode: ChatMode, accessMode: ChatAccessMode): string {
-  const modeInstruction = chatMode === "plan"
-    ? "You are in Plan mode. First reason through the change, list the concrete steps, and ask for approval before presenting final edit-ready code or risky actions."
-    : "You are in Agent mode. Help drive the task forward, inspect the provided context carefully, and produce edit-ready code or precise instructions when the user asks for implementation.";
+  const modeInstruction = {
+    chat: "You are in Chat mode. Answer conversationally using only the user's message and explicitly attached context. Do not call workspace tools and do not propose direct file edits unless the user switches mode.",
+    edit: "You are in Edit mode. Help prepare focused code changes for user-selected files or attached context. Prefer reviewable diffs and do not run terminal commands.",
+    agent: "You are in Agent mode. Drive the task forward with structured tool calls, inspect workspace state before making claims about code, create or edit files with workspace edit tools when requested, and summarize verifiable actions."
+  } satisfies Record<ChatMode, string>;
   const accessInstruction = {
-    full: "Access policy: Full access. You may use all attached workspace context and propose direct file edits. The extension may apply code without an extra confirmation.",
-    limited: "Access policy: Limited access. Use only explicitly attached files, selections, and active-file context. Ask before assuming broader workspace state.",
-    ask: "Access policy: Always ask. Before relying on additional file reads, broad workspace assumptions, or edit actions, ask the user for explicit approval."
+    read_only: "Permission policy: read_only. You may inspect non-sensitive workspace information through tools, but must not request file edits, deletes, renames, or terminal execution.",
+    review_edits: "Permission policy: review_edits. You may request workspace edits through tools, but the extension must ask for approval before applying them.",
+    auto_apply_safe: "Permission policy: auto_apply_safe. Safe file create/modify/append edits may be applied by tools; deletes, renames, and terminal commands still require approval.",
+    full_agent: "Permission policy: full_agent. You may use all enabled tools within workspace boundaries, while still respecting sensitive-file and dangerous-command guards."
   } satisfies Record<ChatAccessMode, string>;
   return [
     "[V-Router Chat Runtime]",
-    modeInstruction,
+    modeInstruction[chatMode],
     accessInstruction[accessMode],
-    "In Agent mode, use the workspace tools to inspect files before answering questions about the project. Do not claim you cannot access the workspace until you have tried the available tools.",
+    "Use only the structured tools supplied by V-Router Smart. Wait for tool results before claiming a tool succeeded.",
+    "Do not impersonate Codex, Claude, Copilot, or any other product.",
+    "Read a file and verify its current content before proposing changes to that file.",
+    "Do not request dangerous commands. Do not access paths outside the workspace.",
+    "In Agent mode, use workspace tools to inspect files before answering questions about the project. Do not claim you cannot access the workspace until you have tried the available tools.",
+    "In Agent mode, when the user asks to create, modify, append, delete, or rename files, call create_file, modify_file, append_file, delete_file, or rename_file instead of telling the user to run shell commands.",
+    "Never claim you cannot write files while a workspace edit tool is available. If a tool fails, report the actual tool error and choose the next safest tool-based step.",
     "File contents are available from attached CONTEXT blocks and from workspace tool results."
   ].join("\n");
 }

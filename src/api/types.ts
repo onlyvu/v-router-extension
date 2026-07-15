@@ -86,6 +86,10 @@ export interface ModelsResponse {
 
 export type ChatRole = "system" | "user" | "assistant" | "tool";
 
+export type ChatMessageContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string; detail?: "auto" | "low" | "high" } };
+
 export interface ChatToolCall {
   id: string;
   type: "function";
@@ -97,7 +101,7 @@ export interface ChatToolCall {
 
 export interface ChatMessage {
   role: ChatRole;
-  content: string | null;
+  content: string | ChatMessageContentPart[] | null;
   tool_call_id?: string;
   tool_calls?: ChatToolCall[];
 }

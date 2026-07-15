@@ -4,6 +4,7 @@ import "./styles/main.css";
 import type { ChatAccessMode, ChatMode, Conversation, ConversationMessage, ContextAttachment } from "../../chat/types";
 import type { ModelEntry, QuotaSnapshot } from "../../api/types";
 import type { InboundMessage, OutboundMessage, WebviewInitState } from "../../protocol";
+import { ACCESS_OPTIONS, MODE_OPTIONS, compactModelName, formatRelativeTime } from "./app/AppState";
 
 interface VsCodeApi {
   postMessage(message: InboundMessage): void;
@@ -25,6 +26,7 @@ let draft = vscode.getState()?.draft ?? "";
 let modelFilter = vscode.getState()?.modelFilter ?? "";
 let apiBusy = false;
 let renderTimer: number | null = null;
+let pastedImageCounter = 0;
 const surface = document.body.dataset.surface === "chat" ? "chat" : "admin";
 
 const appRoot = document.getElementById("app");
@@ -96,15 +98,12 @@ function render(): void {
   }
 
   if (!state.auth.hasKey) {
-    app.appendChild(renderChatHeader());
     app.appendChild(renderOnboarding());
     app.appendChild(renderNotificationsRegion());
     return;
   }
-  app.appendChild(renderChatHeader());
   app.appendChild(renderChat());
   app.appendChild(renderComposer());
-  app.appendChild(renderQuotaBar(state.quota));
   app.appendChild(renderNotificationsRegion());
 }
 
@@ -126,38 +125,21 @@ function renderHeader(): HTMLElement {
   return header;
 }
 
-function renderChatHeader(): HTMLElement {
-  const header = el("header", "chat-header workbench-header");
-  const title = el("div", "chat-title");
-  const activeTitle = state === null ? "Untitled" : getActiveConversation().title;
-  title.appendChild(el("strong", undefined, activeTitle.length > 0 ? activeTitle : "Untitled"));
-  header.appendChild(title);
-
-  const controls = el("div", "chat-header-controls");
-  controls.appendChild(button("+", "icon-button ghost", () => post({ type: "chat:new" }), "Chat mới"));
-  controls.appendChild(button("↺", "icon-button ghost", () => post({ type: "chat:clear" }), "Clear chat"));
-  controls.appendChild(button("{}", "icon-button ghost", () => post({ type: "request:showLast" }), "Xem request gần nhất"));
-  controls.appendChild(button("...", "icon-button ghost", () => post({ type: "settings:open" }), "Cài đặt"));
-  header.appendChild(controls);
-  return header;
-}
-
 function renderOnboarding(): HTMLElement {
   const current = requireState();
-  const wrap = el("main", "onboarding");
+  const wrap = el("main", "onboarding compact-onboarding");
   const hero = el("section", "onboarding-hero");
-  hero.appendChild(el("div", "large-mark", "VR"));
+  hero.appendChild(renderVRouterMark("large-mark"));
   hero.appendChild(el("h1", undefined, "V-Router Smart"));
-  hero.appendChild(el("p", undefined, "Trợ lý lập trình AI kết nối trực tiếp với V-Router"));
+  hero.appendChild(el("p", undefined, "Kết nối coding agent với endpoint V-Router cố định."));
   wrap.appendChild(hero);
 
   const server = el("section", "panel");
-  server.appendChild(el("label", "field-label", "Server Origin"));
+  server.appendChild(el("label", "field-label", "V-Router endpoint cố định"));
   server.appendChild(el("code", "server-code", current.serverOrigin));
-  server.appendChild(button("Cài đặt nâng cao", "secondary full", () => post({ type: "settings:open" })));
   wrap.appendChild(server);
 
-  const form = el("section", "panel");
+  const form = el("section", "panel auth-panel");
   form.appendChild(el("label", "field-label", "API key"));
   const row = el("div", "password-row");
   const input = el("input", "input");
@@ -215,9 +197,8 @@ function renderAdminDashboard(): HTMLElement {
   wrap.appendChild(status);
 
   const server = el("section", "admin-card");
-  server.appendChild(el("label", "field-label", "Server Origin"));
+  server.appendChild(el("label", "field-label", "V-Router endpoint cố định"));
   server.appendChild(el("code", "server-code", state?.serverOrigin ?? ""));
-  server.appendChild(button("Cài đặt nâng cao", "secondary full", () => post({ type: "settings:open" })));
   wrap.appendChild(server);
 
   const model = el("section", "admin-card");
@@ -250,7 +231,7 @@ function renderAdminDashboard(): HTMLElement {
 function renderChat(): HTMLElement {
   const main = el("main", "chat");
   const conversation = getActiveConversation();
-  const messages = el("section", "messages");
+  const messages = el("section", conversation.messages.length === 0 ? "messages empty-messages" : "messages");
   messages.setAttribute("aria-live", "polite");
   if (conversation.messages.length === 0) {
     messages.appendChild(renderConversationList());
@@ -267,46 +248,30 @@ function renderChat(): HTMLElement {
 function renderConversationList(): HTMLElement {
   const current = requireState();
   const list = el("section", "task-list");
-  list.appendChild(el("div", "task-list-label", "Tasks"));
+  const head = el("div", "task-list-head");
+  head.appendChild(el("div", "task-list-label", "Tasks"));
+  const actions = el("div", "task-list-actions");
+  actions.appendChild(button("Clear", "task-action", () => post({ type: "chat:clear" }), "Clear current chat"));
+  actions.appendChild(button("Clear all", "task-action", () => post({ type: "chat:clearAll" }), "Clear all chat history"));
+  head.appendChild(actions);
+  list.appendChild(head);
   for (const conversation of current.conversations.slice(0, 4)) {
-    const row = button(conversation.title, conversation.id === current.activeConversationId ? "task-row active" : "task-row", () => {
+    const row = button("", conversation.id === current.activeConversationId ? "task-row active" : "task-row", () => {
       post({ type: "chat:select", conversationId: conversation.id });
     });
-    row.appendChild(el("span", undefined, formatRelativeTime(conversation.updatedAt)));
+    row.appendChild(el("span", "task-title", conversation.title));
+    const meta = el("span", "task-meta");
+    meta.appendChild(el("span", "task-time", formatRelativeTime(conversation.updatedAt)));
+    const deleteButton = button("×", "task-delete", () => post({ type: "chat:delete", conversationId: conversation.id }), `Xóa ${conversation.title}`);
+    deleteButton.addEventListener("click", (event) => event.stopPropagation());
+    meta.appendChild(deleteButton);
+    row.appendChild(meta);
     list.appendChild(row);
   }
   if (current.conversations.length > 4) {
-    list.appendChild(el("div", "task-list-more", `View all (${current.conversations.length})`));
+    list.appendChild(button(`View all (${current.conversations.length})`, "task-list-more", () => post({ type: "history:open" })));
   }
   return list;
-}
-
-function formatRelativeTime(value: string): string {
-  const deltaMs = Math.max(0, Date.now() - new Date(value).getTime());
-  const minutes = Math.floor(deltaMs / 60000);
-  if (minutes < 1) {
-    return "now";
-  }
-  if (minutes < 60) {
-    return `${minutes}m`;
-  }
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) {
-    return `${hours}h`;
-  }
-  return `${Math.floor(hours / 24)}d`;
-}
-
-function renderContextSummaryInline(context: ContextAttachment[]): HTMLElement {
-  const node = el("div", "inline-context");
-  if (context.length === 0) {
-    node.textContent = "Không có context";
-    return node;
-  }
-  const totalBytes = context.reduce((sum, item) => sum + item.bytes, 0);
-  const totalTokens = context.reduce((sum, item) => sum + item.tokenEstimate, 0);
-  node.textContent = `${context.length} context · ${Math.round(totalBytes / 1024)} KB · ~${totalTokens} token`;
-  return node;
 }
 
 function renderModelPicker(): HTMLElement {
@@ -385,41 +350,17 @@ function renderQuotaBadge(quota: QuotaSnapshot | null): HTMLElement {
   return badge;
 }
 
-function renderQuotaBar(quota: QuotaSnapshot | null): HTMLElement {
-  const bar = el("footer", "quota-bar");
-  const percent = quota === null ? 0 : Math.max(0, Math.min(100, Math.round(quota.percentUsed)));
-  const left = el("div", "quota-bar-main");
-  left.appendChild(el("strong", undefined, quota === null ? "Quota chưa xác minh" : `${percent}% quota đã dùng`));
-  left.appendChild(el("span", undefined, quota === null
-    ? "Bấm refresh trong quản trị nếu cần kiểm tra lại"
-    : quota.remaining === null
-      ? "Không giới hạn token"
-      : `${quota.remaining.toLocaleString()} token còn lại`));
-  const track = el("div", "quota-track");
-  const fill = el("div", `quota-fill ${percent >= 95 ? "danger" : percent >= 80 ? "warning" : "ok"}`);
-  fill.style.width = `${percent}%`;
-  track.appendChild(fill);
-  left.appendChild(track);
-  bar.appendChild(left);
-
-  const side = el("div", "quota-bar-side");
-  side.appendChild(el("span", "status-pill", quota?.effectiveStatus ?? "unknown"));
-  if (quota?.resetAt !== null && quota?.resetAt !== undefined) {
-    side.appendChild(el("small", undefined, `Reset ${new Date(quota.resetAt).toLocaleString()}`));
-  }
-  bar.appendChild(side);
-  return bar;
-}
-
 function renderEmptyState(): HTMLElement {
   const empty = el("section", "empty");
-  const brand = el("div", "empty-brand");
-  brand.appendChild(el("span", "empty-spark", "V"));
-  brand.appendChild(el("strong", undefined, "V-Router"));
-  empty.appendChild(brand);
-  empty.appendChild(el("div", "empty-bot", "VR"));
-  empty.appendChild(el("p", undefined, "Use Plan mode to talk through big changes before a commit. Press Shift Tab to cycle between modes."));
+  empty.appendChild(renderVRouterMark("empty-mark"));
   return empty;
+}
+
+function renderVRouterMark(className: string): HTMLElement {
+  const mark = el("div", className);
+  mark.setAttribute("aria-hidden", "true");
+  mark.appendChild(el("span", "mark-node", "V"));
+  return mark;
 }
 
 function renderMessage(message: ConversationMessage): HTMLElement {
@@ -494,17 +435,20 @@ function decorateLinks(container: HTMLElement): void {
 
 function renderComposer(): HTMLElement {
   const composer = el("footer", "composer");
-  composer.appendChild(renderContextChips(state?.context ?? []));
   const box = el("section", "composer-box");
+  box.appendChild(renderContextChips(state?.context ?? []));
   const textarea = el("textarea", "composer-input");
-  textarea.placeholder = state?.chatMode === "plan" ? "Plan anything" : "Do anything";
+  textarea.placeholder = state?.chatMode === "agent" ? "Do anything" : state?.chatMode === "edit" ? "Edit selected code" : "Ask anything";
   textarea.value = draft;
   textarea.rows = 3;
   textarea.disabled = state?.isStreaming === true;
+  autoGrowTextarea(textarea);
   textarea.addEventListener("input", () => {
     draft = textarea.value;
+    autoGrowTextarea(textarea);
     persistDraft();
   });
+  textarea.addEventListener("paste", handleComposerPaste);
   textarea.addEventListener("keydown", (event) => {
     if (event.key === "Tab" && event.shiftKey) {
       event.preventDefault();
@@ -519,16 +463,14 @@ function renderComposer(): HTMLElement {
   box.appendChild(textarea);
   const tools = el("div", "composer-tools");
   const left = el("div", "composer-left");
-  left.appendChild(button("+", "icon-button ghost", () => post({ type: "context:chooseFiles" }), "Chọn file"));
-  left.appendChild(button("/", "icon-button ghost", () => post({ type: "context:attachSelection" }), "Đính kèm selection"));
-  left.appendChild(button("file", "compact-chip", () => post({ type: "context:attachActiveFile" }), "Đính kèm file hiện tại"));
+  left.appendChild(button("+", "attach-button", () => post({ type: "context:openMenu" }), "Attach context"));
+  left.appendChild(renderAccessSelect());
   left.appendChild(renderModeToggle());
   tools.appendChild(left);
 
   const right = el("div", "composer-right");
-  right.appendChild(renderAccessSelect());
   right.appendChild(renderComposerModelSelect());
-  const canSend = state !== null && state.selectedModel.length > 0 && !state.isStreaming;
+  const canSend = state !== null && state.selectedModel.length > 0 && !state.isStreaming && (draft.trim().length > 0 || state.context.length > 0);
   right.appendChild(button(state?.isStreaming === true ? "■" : "↑", canSend || state?.isStreaming === true ? "send-button" : "send-button disabled", () => {
     if (state?.isStreaming === true) {
       post({ type: "chat:stop" });
@@ -543,22 +485,18 @@ function renderComposer(): HTMLElement {
 }
 
 function renderModeToggle(): HTMLElement {
-  const current = state?.chatMode ?? "agent";
+  const current = state?.chatMode ?? "chat";
   const wrap = el("div", "mode-toggle");
-  wrap.appendChild(button("Agent", current === "agent" ? "mode-option active" : "mode-option", () => setChatMode("agent")));
-  wrap.appendChild(button("Plan", current === "plan" ? "mode-option active" : "mode-option", () => setChatMode("plan")));
+  for (const [mode, label] of MODE_OPTIONS) {
+    wrap.appendChild(button(label, current === mode ? "mode-option active" : "mode-option", () => setChatMode(mode)));
+  }
   return wrap;
 }
 
 function renderAccessSelect(): HTMLElement {
   const select = el("select", "access-select");
   select.setAttribute("aria-label", "Access mode");
-  const options: Array<[ChatAccessMode, string]> = [
-    ["full", "Full access"],
-    ["limited", "Limited"],
-    ["ask", "Always ask"]
-  ];
-  for (const [value, label] of options) {
+  for (const [value, label] of ACCESS_OPTIONS) {
     const option = document.createElement("option");
     option.value = value;
     option.textContent = label;
@@ -597,11 +535,6 @@ function renderComposerModelSelect(): HTMLElement {
   return select;
 }
 
-function compactModelName(modelId: string): string {
-  const clean = modelId.split("/").pop() ?? modelId;
-  return clean.length > 18 ? `${clean.slice(0, 16)}...` : clean;
-}
-
 function setChatMode(mode: ChatMode): void {
   if (state !== null) {
     state.chatMode = mode;
@@ -611,7 +544,51 @@ function setChatMode(mode: ChatMode): void {
 }
 
 function cycleChatMode(): void {
-  setChatMode(state?.chatMode === "plan" ? "agent" : "plan");
+  const current = state?.chatMode ?? "chat";
+  setChatMode(current === "chat" ? "edit" : current === "edit" ? "agent" : "chat");
+}
+
+function autoGrowTextarea(textarea: HTMLTextAreaElement): void {
+  textarea.style.height = "auto";
+  textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
+}
+
+function handleComposerPaste(event: ClipboardEvent): void {
+  const items = event.clipboardData?.items;
+  if (items === undefined) {
+    return;
+  }
+  const imageItem = [...items].find((item) => item.kind === "file" && item.type.startsWith("image/"));
+  const file = imageItem?.getAsFile();
+  if (file === null || file === undefined) {
+    return;
+  }
+  event.preventDefault();
+  attachImageFile(file);
+}
+
+function attachImageFile(file: File): void {
+  if (!file.type.startsWith("image/")) {
+    showToast("Clipboard không chứa ảnh hợp lệ.", "warning");
+    return;
+  }
+  const reader = new FileReader();
+  reader.addEventListener("load", () => {
+    if (typeof reader.result !== "string") {
+      showToast("Không thể đọc ảnh từ clipboard.", "error");
+      return;
+    }
+    pastedImageCounter += 1;
+    post({
+      type: "context:attachImage",
+      name: file.name.length > 0 ? file.name : `pasted-image-${pastedImageCounter}.png`,
+      mimeType: file.type,
+      dataUri: reader.result,
+      bytes: file.size
+    });
+  });
+  reader.addEventListener("error", () => showToast("Không thể đọc ảnh từ clipboard.", "error"));
+  reader.readAsDataURL(file);
 }
 
 function renderContextChips(context: ContextAttachment[]): HTMLElement {
@@ -622,10 +599,16 @@ function renderContextChips(context: ContextAttachment[]): HTMLElement {
   }
   const totalBytes = context.reduce((sum, item) => sum + item.bytes, 0);
   const totalTokens = context.reduce((sum, item) => sum + item.tokenEstimate, 0);
-  wrap.appendChild(el("span", "context-summary", `${context.length} file/selection · ${Math.round(totalBytes / 1024)} KB · ~${totalTokens} token`));
+  wrap.appendChild(el("span", "context-summary", `${context.length} attachment${context.length === 1 ? "" : "s"} · ${Math.round(totalBytes / 1024)} KB · ~${totalTokens} token`));
   for (const item of context) {
-    const chip = el("span", "chip");
+    const chip = el("span", item.kind === "image" ? "chip image-chip" : "chip");
     chip.title = `${item.path} (${item.bytes} bytes)`;
+    if (item.kind === "image" && item.previewDataUri !== undefined) {
+      const preview = document.createElement("img");
+      preview.src = item.previewDataUri;
+      preview.alt = "";
+      chip.appendChild(preview);
+    }
     chip.appendChild(el("span", undefined, `${item.path}${item.lineRange === undefined ? "" : `:${item.lineRange}`}`));
     chip.appendChild(button("×", "chip-close", () => post({ type: "context:remove", id: item.id }), "Xóa context"));
     wrap.appendChild(chip);
@@ -646,7 +629,7 @@ function sendDraft(): void {
     return;
   }
   const text = draft.trim();
-  if (text.length === 0 || state === null || state.selectedModel.length === 0) {
+  if (state === null || state.selectedModel.length === 0 || (text.length === 0 && state.context.length === 0)) {
     return;
   }
   post({ type: "chat:send", text });

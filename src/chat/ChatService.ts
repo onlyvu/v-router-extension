@@ -195,8 +195,15 @@ export class ChatService {
   ): Promise<unknown> {
     let usage: unknown;
     const messages: ChatMessage[] = [...payload.messages];
-    const maxToolRounds = payload.tools === undefined ? 0 : 8;
+    const maxToolRounds = payload.tools === undefined ? 0 : settings.agentMaxIterations;
+    const maxToolCalls = settings.agentMaxToolCalls;
+    const deadline = Date.now() + settings.agentMaxDurationMinutes * 60_000;
+    const seenToolCalls = new Map<string, number>();
+    let totalToolCalls = 0;
     for (let round = 0; round <= maxToolRounds; round += 1) {
+      if (Date.now() > deadline) {
+        throw new Error("Agent exceeded the configured maximum duration.");
+      }
       const result = await this.client.chatCompletions(apiKey, { ...payload, messages }, controller.signal, {
         onDelta: handlers.onDelta,
         onUsage: (nextUsage) => {
@@ -215,12 +222,22 @@ export class ChatService {
       if (round === maxToolRounds) {
         throw new Error("Agent tool loop exceeded the maximum number of rounds.");
       }
+      totalToolCalls += toolCalls.length;
+      if (totalToolCalls > maxToolCalls) {
+        throw new Error("Agent exceeded the configured maximum number of tool calls.");
+      }
       messages.push({
         role: "assistant",
         content: result.content.length > 0 ? result.content : null,
         tool_calls: toolCalls
       });
       for (const toolCall of toolCalls) {
+        const signature = `${toolCall.function.name}:${toolCall.function.arguments}`;
+        const seenCount = seenToolCalls.get(signature) ?? 0;
+        if (seenCount >= 2) {
+          throw new Error(`Agent repeated the same tool call too many times: ${toolCall.function.name}`);
+        }
+        seenToolCalls.set(signature, seenCount + 1);
         handlers.onActivity();
         this.logger.info("Executing workspace tool", { name: toolCall.function.name });
         const toolResult = await this.agentToolExecutor.execute(toolCall, {

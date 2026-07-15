@@ -1,8 +1,8 @@
 import type { ChatRole } from "../api/types";
 
 export type ConversationMessageStatus = "complete" | "streaming" | "error" | "cancelled";
-export type ChatMode = "agent" | "plan";
-export type ChatAccessMode = "full" | "limited" | "ask";
+export type ChatMode = "chat" | "edit" | "agent";
+export type ChatAccessMode = "read_only" | "review_edits" | "auto_apply_safe" | "full_agent";
 
 export interface ConversationMessage {
   id: string;
@@ -21,7 +21,7 @@ export interface Conversation {
   messages: ConversationMessage[];
 }
 
-export type ContextKind = "selection" | "activeFile" | "file" | "diagnostics";
+export type ContextKind = "selection" | "activeFile" | "file" | "diagnostics" | "image";
 
 export interface ContextAttachment {
   id: string;
@@ -32,6 +32,8 @@ export interface ContextAttachment {
   tokenEstimate: number;
   lineRange?: string;
   warning?: string;
+  mimeType?: string;
+  previewDataUri?: string;
 }
 
 export interface ResolvedContextAttachment extends ContextAttachment {

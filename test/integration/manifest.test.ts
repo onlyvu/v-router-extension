@@ -14,6 +14,7 @@ describe("extension manifest integration checks", () => {
       };
       views: Record<string, Array<{ id: string; type?: string; when?: string }>>;
       commands: Array<{ command: string }>;
+      menus: Record<string, Array<{ command: string; when?: string }>>;
       configuration: { properties: Record<string, unknown> };
     };
     capabilities: { untrustedWorkspaces: { supported: boolean } };
@@ -23,20 +24,23 @@ describe("extension manifest integration checks", () => {
     expect(manifest.name).toBe("v-router-smart");
     expect(manifest.contributes.viewsContainers.secondarySidebar[0]).toMatchObject({
       id: "vRouterSmartSecondary",
-      title: "Chat",
+      title: "V-Router",
       when: "!vRouterSmart.doesNotSupportSecondarySidebar"
     });
     expect(manifest.contributes.viewsContainers.activitybar[0]).toMatchObject({
       id: "vRouterSmart",
+      title: "V-Router",
       when: "vRouterSmart.doesNotSupportSecondarySidebar"
     });
     expect(manifest.contributes.views.vRouterSmartSecondary?.[0]).toMatchObject({
       id: "vRouterSmart.chatSecondaryView",
+      name: "V-Router",
       type: "webview",
       when: "!vRouterSmart.doesNotSupportSecondarySidebar"
     });
     expect(manifest.contributes.views.vRouterSmart?.[0]).toMatchObject({
       id: "vRouterSmart.chatView",
+      name: "V-Router",
       type: "webview",
       when: "vRouterSmart.doesNotSupportSecondarySidebar"
     });
@@ -51,7 +55,11 @@ describe("extension manifest integration checks", () => {
       "vRouterSmart.validateApiKey",
       "vRouterSmart.refreshModels",
       "vRouterSmart.refreshQuota",
+      "vRouterSmart.refreshView",
+      "vRouterSmart.openSettings",
       "vRouterSmart.newChat",
+      "vRouterSmart.clearAllHistory",
+      "vRouterSmart.showTaskHistory",
       "vRouterSmart.attachSelection",
       "vRouterSmart.explainSelection",
       "vRouterSmart.fixSelection",
@@ -62,9 +70,17 @@ describe("extension manifest integration checks", () => {
     }
   });
 
+  it("declares native view title actions", () => {
+    const viewTitleCommands = new Set((manifest.contributes.menus["view/title"] ?? []).map((item) => item.command));
+    expect(viewTitleCommands.has("vRouterSmart.refreshView")).toBe(true);
+    expect(viewTitleCommands.has("vRouterSmart.openSettings")).toBe(true);
+    expect(viewTitleCommands.has("vRouterSmart.newChat")).toBe(true);
+  });
+
   it("declares required configuration and restricted workspace support", () => {
     expect(manifest.contributes.configuration.properties["vRouterSmart.systemPrompt"]).toBeDefined();
-    expect(manifest.contributes.configuration.properties["vRouterSmart.serverOrigin"]).toBeDefined();
+    expect(manifest.contributes.configuration.properties["vRouterSmart.serverOrigin"]).toBeUndefined();
+    expect(manifest.contributes.configuration.properties["vRouterSmart.agent.permissionMode"]).toBeDefined();
     expect(manifest.capabilities.untrustedWorkspaces.supported).toBe(true);
   });
 });

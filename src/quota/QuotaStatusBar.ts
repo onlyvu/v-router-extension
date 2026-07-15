@@ -31,8 +31,8 @@ export class QuotaStatusBar implements vscode.Disposable {
   }
 
   public clear(): void {
-    this.item.text = "$(circle-slash) V-Router Quota";
-    this.item.tooltip = "Chưa xác minh quota V-Router Smart. Bấm để mở chat.";
+    this.item.text = "$(pulse) V-Router 0%";
+    this.item.tooltip = "V-Router Smart chưa xác minh quota. Bấm để mở chat.";
     this.item.backgroundColor = undefined;
     this.item.show();
   }

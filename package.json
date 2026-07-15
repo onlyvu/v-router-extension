@@ -35,11 +35,24 @@
     "onCommand:vRouterSmart.validateApiKey",
     "onCommand:vRouterSmart.refreshModels",
     "onCommand:vRouterSmart.refreshQuota",
+    "onCommand:vRouterSmart.refreshView",
+    "onCommand:vRouterSmart.openSettings",
     "onCommand:vRouterSmart.newChat",
+    "onCommand:vRouterSmart.clearAllHistory",
+    "onCommand:vRouterSmart.showTaskHistory",
     "onCommand:vRouterSmart.attachSelection",
     "onCommand:vRouterSmart.explainSelection",
     "onCommand:vRouterSmart.fixSelection",
     "onCommand:vRouterSmart.showLastRequest",
+    "onCommand:vRouterSmart.showAgentInstructions",
+    "onCommand:vRouterSmart.showToolDefinitions",
+    "onCommand:vRouterSmart.startAgentTask",
+    "onCommand:vRouterSmart.stopAgent",
+    "onCommand:vRouterSmart.reviewAgentChanges",
+    "onCommand:vRouterSmart.applyAllChanges",
+    "onCommand:vRouterSmart.rejectAllChanges",
+    "onCommand:vRouterSmart.undoLastAgentTask",
+    "onCommand:vRouterSmart.showAgentHistory",
     "onCommand:vRouterSmart.openLogs"
   ],
   "capabilities": {
@@ -54,7 +67,7 @@
       "activitybar": [
         {
           "id": "vRouterSmart",
-          "title": "Chat",
+          "title": "V-Router",
           "icon": "media/vrouter-activity.svg",
           "when": "vRouterSmart.doesNotSupportSecondarySidebar"
         }
@@ -62,7 +75,7 @@
       "secondarySidebar": [
         {
           "id": "vRouterSmartSecondary",
-          "title": "Chat",
+          "title": "V-Router",
           "icon": "media/vrouter-activity.svg",
           "when": "!vRouterSmart.doesNotSupportSecondarySidebar"
         }
@@ -72,7 +85,7 @@
       "vRouterSmart": [
         {
           "id": "vRouterSmart.chatView",
-          "name": "Chat",
+          "name": "V-Router",
           "type": "webview",
           "when": "vRouterSmart.doesNotSupportSecondarySidebar"
         }
@@ -80,7 +93,7 @@
       "vRouterSmartSecondary": [
         {
           "id": "vRouterSmart.chatSecondaryView",
-          "name": "Chat",
+          "name": "V-Router",
           "type": "webview",
           "when": "!vRouterSmart.doesNotSupportSecondarySidebar"
         }
@@ -118,8 +131,31 @@
         "category": "V-Router Smart"
       },
       {
+        "command": "vRouterSmart.refreshView",
+        "title": "Refresh",
+        "category": "V-Router Smart",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "vRouterSmart.openSettings",
+        "title": "Settings",
+        "category": "V-Router Smart",
+        "icon": "$(gear)"
+      },
+      {
         "command": "vRouterSmart.newChat",
-        "title": "V-Router Smart: New Chat",
+        "title": "New Task",
+        "category": "V-Router Smart",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "vRouterSmart.clearAllHistory",
+        "title": "V-Router Smart: Clear All Chat History",
+        "category": "V-Router Smart"
+      },
+      {
+        "command": "vRouterSmart.showTaskHistory",
+        "title": "V-Router Smart: Show Task History",
         "category": "V-Router Smart"
       },
       {
@@ -143,12 +179,74 @@
         "category": "V-Router Smart"
       },
       {
+        "command": "vRouterSmart.showAgentInstructions",
+        "title": "V-Router Smart: Show Agent Instructions",
+        "category": "V-Router Smart"
+      },
+      {
+        "command": "vRouterSmart.showToolDefinitions",
+        "title": "V-Router Smart: Show Tool Definitions",
+        "category": "V-Router Smart"
+      },
+      {
+        "command": "vRouterSmart.startAgentTask",
+        "title": "V-Router Smart: Start Agent Task",
+        "category": "V-Router Smart"
+      },
+      {
+        "command": "vRouterSmart.stopAgent",
+        "title": "V-Router Smart: Stop Agent",
+        "category": "V-Router Smart"
+      },
+      {
+        "command": "vRouterSmart.reviewAgentChanges",
+        "title": "V-Router Smart: Review Agent Changes",
+        "category": "V-Router Smart"
+      },
+      {
+        "command": "vRouterSmart.applyAllChanges",
+        "title": "V-Router Smart: Apply All Changes",
+        "category": "V-Router Smart"
+      },
+      {
+        "command": "vRouterSmart.rejectAllChanges",
+        "title": "V-Router Smart: Reject All Changes",
+        "category": "V-Router Smart"
+      },
+      {
+        "command": "vRouterSmart.undoLastAgentTask",
+        "title": "V-Router Smart: Undo Last Agent Task",
+        "category": "V-Router Smart"
+      },
+      {
+        "command": "vRouterSmart.showAgentHistory",
+        "title": "V-Router Smart: Show Agent History",
+        "category": "V-Router Smart"
+      },
+      {
         "command": "vRouterSmart.openLogs",
         "title": "V-Router Smart: Open Logs",
         "category": "V-Router Smart"
       }
     ],
     "menus": {
+      "view/title": [
+        {
+          "command": "vRouterSmart.refreshView",
+          "when": "view == vRouterSmart.chatSecondaryView || view == vRouterSmart.chatView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "vRouterSmart.openSettings",
+          "when": "view == vRouterSmart.chatSecondaryView || view == vRouterSmart.chatView",
+          "group": "navigation@2"
+        },
+        {
+          "command": "vRouterSmart.newChat",
+          "when": "view == vRouterSmart.chatSecondaryView || view == vRouterSmart.chatView",
+          "group": "navigation@3"
+        }
+      ],
       "editor/context": [
         {
           "command": "vRouterSmart.explainSelection",
@@ -170,11 +268,6 @@
     "configuration": {
       "title": "V-Router Smart",
       "properties": {
-        "vRouterSmart.serverOrigin": {
-          "type": "string",
-          "default": "https://v-router.fpt.ovh",
-          "description": "Server Origin của V-Router. HTTP chỉ được chấp nhận cho localhost/127.0.0.1/[::1]."
-        },
         "vRouterSmart.defaultModel": {
           "type": "string",
           "default": "",
@@ -270,6 +363,120 @@
           "minimum": 1,
           "maximum": 200000,
           "description": "max_tokens tùy chọn."
+        },
+        "vRouterSmart.mode.default": {
+          "type": "string",
+          "enum": ["chat", "edit", "agent"],
+          "default": "chat",
+          "description": "Mode mặc định khi mở V-Router Smart."
+        },
+        "vRouterSmart.agent.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Bật Agent Mode structured tool calling."
+        },
+        "vRouterSmart.agent.permissionMode": {
+          "type": "string",
+          "enum": ["read_only", "review_edits", "auto_apply_safe", "full_agent"],
+          "default": "review_edits",
+          "description": "Permission mặc định cho Agent Mode."
+        },
+        "vRouterSmart.agent.maxIterations": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Số iteration tối đa cho một agent task."
+        },
+        "vRouterSmart.agent.maxToolCalls": {
+          "type": "number",
+          "default": 100,
+          "minimum": 1,
+          "maximum": 300,
+          "description": "Số tool call tối đa cho một agent task."
+        },
+        "vRouterSmart.agent.maxDurationMinutes": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 180,
+          "description": "Thời lượng tối đa của một agent task."
+        },
+        "vRouterSmart.agent.autoApplySafeEdits": {
+          "type": "boolean",
+          "default": false,
+          "description": "Cho phép auto-apply edit an toàn khi policy cho phép."
+        },
+        "vRouterSmart.agent.confirmFileCreate": {
+          "type": "boolean",
+          "default": true,
+          "description": "Yêu cầu xác nhận trước khi agent tạo file."
+        },
+        "vRouterSmart.agent.confirmFileDelete": {
+          "type": "boolean",
+          "default": true,
+          "description": "Yêu cầu xác nhận trước khi agent xóa file."
+        },
+        "vRouterSmart.agent.confirmFileRename": {
+          "type": "boolean",
+          "default": true,
+          "description": "Yêu cầu xác nhận trước khi agent rename file."
+        },
+        "vRouterSmart.agent.terminalEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Cho phép agent chạy terminal command có kiểm soát."
+        },
+        "vRouterSmart.agent.taskExecutionEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Cho phép agent chạy VS Code task có kiểm soát."
+        },
+        "vRouterSmart.agent.checkpointsEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Bật checkpoint trước các thay đổi workspace."
+        },
+        "vRouterSmart.agent.checkpointRetention": {
+          "type": "number",
+          "default": 50,
+          "minimum": 1,
+          "maximum": 500,
+          "description": "Số checkpoint giữ lại."
+        },
+        "vRouterSmart.agent.historyRetentionDays": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 365,
+          "description": "Số ngày giữ agent history."
+        },
+        "vRouterSmart.agent.maxSnapshotStorageMb": {
+          "type": "number",
+          "default": 500,
+          "minimum": 10,
+          "maximum": 10000,
+          "description": "Dung lượng tối đa cho snapshot/checkpoint."
+        },
+        "vRouterSmart.agent.showToolTimeline": {
+          "type": "boolean",
+          "default": true,
+          "description": "Hiển thị tool timeline trong UI."
+        },
+        "vRouterSmart.agent.showPlan": {
+          "type": "boolean",
+          "default": true,
+          "description": "Hiển thị plan checklist trong UI."
+        },
+        "vRouterSmart.agent.contextCompactionEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Bật context compaction cho agent task dài."
+        },
+        "vRouterSmart.agent.requireApprovalForSensitiveFiles": {
+          "type": "boolean",
+          "default": true,
+          "description": "Yêu cầu approval khi đọc file có khả năng nhạy cảm."
         }
       }
     }

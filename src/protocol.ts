@@ -37,6 +37,8 @@ export type InboundMessage =
   | { type: "chat:new" }
   | { type: "chat:select"; conversationId: string }
   | { type: "chat:clear" }
+  | { type: "chat:clearAll" }
+  | { type: "chat:delete"; conversationId: string }
   | { type: "chat:setMode"; mode: ChatMode }
   | { type: "chat:setAccess"; accessMode: ChatAccessMode }
   | { type: "model:select"; modelId: string }
@@ -46,6 +48,8 @@ export type InboundMessage =
   | { type: "context:attachSelection" }
   | { type: "context:attachActiveFile" }
   | { type: "context:chooseFiles" }
+  | { type: "context:openMenu" }
+  | { type: "context:attachImage"; name: string; mimeType: string; dataUri: string; bytes: number }
   | { type: "context:remove"; id: string }
   | { type: "context:clear" }
   | { type: "code:copy"; code: string }
@@ -55,6 +59,7 @@ export type InboundMessage =
   | { type: "link:open"; href: string }
   | { type: "chat:open" }
   | { type: "settings:open" }
+  | { type: "history:open" }
   | { type: "request:showLast" };
 
 export type OutboundMessage =
@@ -84,11 +89,15 @@ function isString(value: unknown): value is string {
 }
 
 function isChatMode(value: unknown): value is ChatMode {
-  return value === "agent" || value === "plan";
+  return value === "chat" || value === "edit" || value === "agent";
 }
 
 function isChatAccessMode(value: unknown): value is ChatAccessMode {
-  return value === "full" || value === "limited" || value === "ask";
+  return value === "read_only" || value === "review_edits" || value === "auto_apply_safe" || value === "full_agent";
+}
+
+function isSafeImageDataUri(value: unknown): value is string {
+  return typeof value === "string" && /^data:image\/(?:png|jpe?g|webp|gif);base64,[a-z0-9+/=\r\n]+$/i.test(value);
 }
 
 export function parseInboundMessage(value: unknown): InboundMessage | null {
@@ -101,15 +110,18 @@ export function parseInboundMessage(value: unknown): InboundMessage | null {
     case "chat:stop":
     case "chat:new":
     case "chat:clear":
+    case "chat:clearAll":
     case "model:refresh":
     case "quota:refresh":
     case "usage:load":
     case "context:attachSelection":
     case "context:attachActiveFile":
     case "context:chooseFiles":
+    case "context:openMenu":
     case "context:clear":
     case "chat:open":
     case "settings:open":
+    case "history:open":
     case "request:showLast":
       return { type: value.type };
     case "auth:save":
@@ -127,8 +139,25 @@ export function parseInboundMessage(value: unknown): InboundMessage | null {
       return isChatAccessMode(value.accessMode) ? { type: value.type, accessMode: value.accessMode } : null;
     case "chat:select":
       return isString(value.conversationId) ? { type: value.type, conversationId: value.conversationId } : null;
+    case "chat:delete":
+      return isString(value.conversationId) ? { type: value.type, conversationId: value.conversationId } : null;
     case "model:select":
       return isString(value.modelId) ? { type: value.type, modelId: value.modelId } : null;
+    case "context:attachImage":
+      return isString(value.name) &&
+        isString(value.mimeType) &&
+        isSafeImageDataUri(value.dataUri) &&
+        typeof value.bytes === "number" &&
+        Number.isFinite(value.bytes) &&
+        value.bytes > 0
+        ? {
+          type: value.type,
+          name: value.name,
+          mimeType: value.mimeType,
+          dataUri: value.dataUri,
+          bytes: Math.floor(value.bytes)
+        }
+        : null;
     case "context:remove":
       return isString(value.id) ? { type: value.type, id: value.id } : null;
     case "code:copy":

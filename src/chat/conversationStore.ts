@@ -180,6 +180,21 @@ export class ConversationStore {
     return conversation;
   }
 
+  public async deleteConversation(conversationId: string): Promise<Conversation> {
+    this.data.conversations = this.data.conversations.filter((conversation) => conversation.id !== conversationId);
+    if (this.data.conversations.length === 0) {
+      const conversation = createConversation();
+      this.data = { schemaVersion: SCHEMA_VERSION, activeConversationId: conversation.id, conversations: [conversation] };
+      await this.save();
+      return conversation;
+    }
+    if (this.data.activeConversationId === conversationId) {
+      this.data.activeConversationId = this.data.conversations[0]?.id ?? createConversation().id;
+    }
+    await this.save();
+    return this.getActiveConversation();
+  }
+
   public async clearAll(): Promise<Conversation> {
     const conversation = createConversation();
     this.data = { schemaVersion: SCHEMA_VERSION, activeConversationId: conversation.id, conversations: [conversation] };

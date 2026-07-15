@@ -159,7 +159,7 @@ export class VRouterClient {
       url,
       method: "POST",
       headers: redactHeaders(headers),
-      body: payload,
+      body: redactImagePayload(payload),
       createdAt: new Date().toISOString()
     };
     this.logger.info("Chat completions request", { path: "/v1/chat/completions", model: payload.model });
@@ -275,4 +275,21 @@ export class VRouterClient {
     this.cookieManager.updateFromHeaders(retried.headers);
     return retried;
   }
+}
+
+function redactImagePayload(payload: ChatCompletionRequest): ChatCompletionRequest {
+  return {
+    ...payload,
+    messages: payload.messages.map((message) => {
+      if (!Array.isArray(message.content)) {
+        return message;
+      }
+      return {
+        ...message,
+        content: message.content.map((part) => part.type === "image_url"
+          ? { ...part, image_url: { ...part.image_url, url: "[image data redacted]" } }
+          : part)
+      };
+    })
+  };
 }
